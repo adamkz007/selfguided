@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://selfguided.local/schemas/selfguided.config.schema.json",
+  "title": "SelfGuided Skill Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["repoPath"],
+  "properties": {
+    "repoPath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Local path to the SaaS repository to analyze."
+    },
+    "appUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Application URL or local dev server URL. Browser navigation requires explicit owner approval."
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Authentication instructions or test account details. Use requires explicit owner approval.",
+      "properties": {
+        "approved": {
+          "type": "boolean",
+          "const": true,
+          "description": "Must be true before authenticated access is used."
+        },
+        "instructions": {
+          "type": "string",
+          "description": "Human-readable login or session instructions. Do not store raw secrets unless explicitly permitted."
+        },
+        "testAccountRef": {
+          "type": "string",
+          "description": "Reference to a test account or secret-manager entry rather than inline credentials."
+        }
+      }
+    },
+    "productGoals": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Product goals and target outcomes the guides should support."
+    },
+    "priorityJourneys": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "audience": { "type": "string" },
+          "priority": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+          "successCriteria": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "description": "Priority user journeys to discover, validate, and document."
+    },
+    "brandTheme": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Brand, theme, voice, and accessibility constraints for generated guides.",
+      "properties": {
+        "tone": { "type": "string" },
+        "terminology": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "visualConstraints": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "accessibility": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "approvals": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Explicit owner approvals for sensitive SelfGuided actions.",
+      "properties": {
+        "browserNavigation": { "type": "boolean", "default": false },
+        "authenticatedSession": { "type": "boolean", "default": false },
+        "screenshotCapture": { "type": "boolean", "default": false },
+        "writeGeneratedGuides": { "type": "boolean", "default": false },
+        "productionDataMutation": { "type": "boolean", "default": false },
+        "commitGeneratedContent": { "type": "boolean", "default": false }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Requested SelfGuided outputs.",
+      "properties": {
+        "applicationMap": { "type": "boolean", "default": true },
+        "userJourneyInventory": { "type": "boolean", "default": true },
+        "screenshotBackedGuides": { "type": "boolean", "default": false },
+        "guidesRoute": { "type": "boolean", "default": false },
+        "searchableGuideIndex": { "type": "boolean", "default": false }
+      }
+    }
+  }
+}
