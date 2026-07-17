@@ -70,3 +70,4 @@ export function buildDocsMap(root: string): DocsMap {
 }
 
 export * from './output-schema';
+export * from '../owner-alignment';
