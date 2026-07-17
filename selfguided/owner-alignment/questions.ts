@@ -1,4 +1,3 @@
-import type { ApplicationMap } from '../discovery/output-schema';
 import { keyGoals, targetAudiences, type KeyGoal, type OwnerAlignmentResult, type TargetAudience } from './schema';
 
 export type OwnerAlignmentQuestionType = 'multi-select' | 'free-text-list' | 'boolean' | 'credentials-availability';
@@ -79,36 +78,26 @@ export function formatOwnerAlignmentPrompt(): string {
     .join('\n\n');
 }
 
+export interface OwnerAlignmentDiscoverySummary {
+  routeCount: number;
+  navigationSourceCount: number;
+  helpContentCount: number;
+}
 
 export interface OwnerAlignmentCheckpoint {
   phase: 'after-static-discovery';
   blockedUntilOwnerApproval: true;
-  discoverySummary?: {
-    routeCount: number;
-    navigationSourceCount: number;
-    helpContentCount: number;
-  };
+  discoverySummary?: OwnerAlignmentDiscoverySummary;
   prompt: string;
   questions: readonly OwnerAlignmentQuestion[];
   outputFiles: readonly ['.selfguided/owner-alignment.json', '.selfguided/approved-guide-plan.md'];
 }
 
-export function createOwnerAlignmentCheckpoint(applicationMap?: ApplicationMap): OwnerAlignmentCheckpoint {
+export function createOwnerAlignmentCheckpoint(discoverySummary?: OwnerAlignmentDiscoverySummary): OwnerAlignmentCheckpoint {
   return {
     phase: 'after-static-discovery',
     blockedUntilOwnerApproval: true,
-    discoverySummary: applicationMap
-      ? {
-          routeCount: applicationMap.routes.length,
-          navigationSourceCount:
-            applicationMap.navigation.sidebars.length +
-            applicationMap.navigation.headers.length +
-            applicationMap.navigation.navComponents.length +
-            applicationMap.navigation.routeConstants.length +
-            applicationMap.navigation.breadcrumbs.length,
-          helpContentCount: applicationMap.docs.helpCenterContent.length,
-        }
-      : undefined,
+    discoverySummary,
     prompt: formatOwnerAlignmentPrompt(),
     questions: ownerAlignmentQuestions,
     outputFiles: ['.selfguided/owner-alignment.json', '.selfguided/approved-guide-plan.md'],
