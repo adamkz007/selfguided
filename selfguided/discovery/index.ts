@@ -70,3 +70,5 @@ export function buildDocsMap(root: string): DocsMap {
 }
 
 export * from './output-schema';
+
+export { generateProductUnderstandingReport, generateReviewArtifacts, writeReviewArtifacts } from '../reports/product-understanding';
