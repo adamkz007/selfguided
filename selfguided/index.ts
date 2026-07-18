@@ -2,3 +2,8 @@ export * from './browser';
 export * from './discovery';
 export * from './owner-alignment';
 export * from './assets/screenshots';
+export * from './guides/frontmatter-schema';
+export * from './guides/generate-guide';
+export * from './guides/next-app-router';
+export * from './review/approval-schema';
+export * from './review/guide-review';
