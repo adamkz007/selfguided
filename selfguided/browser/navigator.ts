@@ -2,7 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { relative } from 'node:path';
 import { captureApprovedScreenshot } from './screenshotter';
 import { createBrowserSession, type BrowserLauncherAdapter, type BrowserPageAdapter } from './session';
-import { evaluateRunSafety, isDestructiveText, loadApprovedPlan, type BrowserRunRequest, type TestCredentials } from './safety-guards';
+import { evaluateRunSafety, isDestructiveText, loadApprovedPlan, requiresCredentials, type BrowserRunRequest, type TestCredentials } from './safety-guards';
 import type { BrowserTraceStep, PageObservation, VisibleElementSummary } from './trace-schema';
 
 export interface BrowserNavigationOptions extends BrowserRunRequest {
@@ -36,6 +36,11 @@ export async function runApprovedBrowserJourney(options: BrowserNavigationOption
         session.trace.status = 'blocked';
         break;
       }
+      if (requiresCredentials(instruction) && !options.credentials) {
+        session.trace.steps.push(blockedStep(index, options.journeySlug, instruction, 'missing-credentials', 'This step requires owner-approved test credentials before continuing.'));
+        session.trace.status = 'blocked';
+        break;
+      }
       if (isDestructiveText(instruction) && !options.allowDestructiveActions) {
         session.trace.steps.push(blockedStep(index, options.journeySlug, instruction, 'unclear-destructive-action', 'This step appears destructive and needs explicit test-environment approval.'));
         session.trace.status = 'blocked';
@@ -62,7 +67,7 @@ export async function runApprovedBrowserJourney(options: BrowserNavigationOption
 async function executeApprovedInstruction(page: BrowserPageAdapter, instruction: string, credentials?: TestCredentials): Promise<void> {
   const goTo = instruction.match(/(?:go to|open|visit)\s+(https?:\/\/\S+|\/\S*)/i);
   if (goTo) {
-    await page.goto(goTo[1]);
+    await page.goto(resolveNavigationUrl(page.url(), goTo[1]));
     return;
   }
 
@@ -70,6 +75,7 @@ async function executeApprovedInstruction(page: BrowserPageAdapter, instruction:
   if (fill) {
     const field = fill[1].replace(/(?:field|input)$/i, '').trim();
     const value = credentialValue(fill[2].trim(), credentials);
+    if (!value) throw new Error(`Missing owner-approved test credential for ${field}.`);
     const locator = page.locator(`input[name="${field}"],input[placeholder*="${field}"],textarea[name="${field}"],textarea[placeholder*="${field}"]`);
     if (locator.fill) await locator.fill(value);
     return;
@@ -81,6 +87,11 @@ async function executeApprovedInstruction(page: BrowserPageAdapter, instruction:
     const locator = page.locator(`text=${label}`);
     if (locator.click) await locator.click();
   }
+}
+
+function resolveNavigationUrl(currentUrl: string, target: string): string {
+  if (/^https?:\/\//i.test(target)) return target;
+  return new URL(target, currentUrl).toString();
 }
 
 function credentialValue(token: string, credentials?: TestCredentials): string {
@@ -149,9 +160,19 @@ function writeArtifacts(tracePath: string, observationsPath: string, trace: unkn
     if (step.blocked) lines.push(`Blocked: ${step.blocked.reason} — ${step.blocked.message}`, '');
     if (step.observation) {
       lines.push(`- URL: ${step.observation.url}`, `- Title: ${step.observation.title}`);
+      appendObservationList(lines, 'Headings', step.observation.headings.map((entry) => entry.text));
+      appendObservationList(lines, 'Buttons', step.observation.buttons.map((entry) => entry.text));
+      appendObservationList(lines, 'Links', step.observation.links.map((entry) => entry.text || entry.href || '').filter(Boolean));
+      appendObservationList(lines, 'Form fields', step.observation.formFields.map((entry) => entry.name || entry.placeholder || entry.type || '').filter(Boolean));
+      appendObservationList(lines, 'States', step.observation.states.map((entry) => entry.text));
       if (step.observation.screenshotPath) lines.push(`- Screenshot: ${relative(root, step.observation.screenshotPath)}`);
       lines.push('');
     }
   }
   writeFileSync(observationsPath, `${lines.join('\n')}\n`);
+}
+
+function appendObservationList(lines: string[], label: string, values: string[]): void {
+  const visibleValues = values.map((value) => value.trim()).filter(Boolean).slice(0, 20);
+  if (visibleValues.length) lines.push(`- ${label}: ${visibleValues.join('; ')}`);
 }
