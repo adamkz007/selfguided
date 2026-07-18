@@ -54,18 +54,25 @@ export function loadApprovedPlan(root: string): ApprovedPlanContext {
 
 export function evaluateRunSafety(request: BrowserRunRequest, plan = loadApprovedPlan(request.root)): SafetyBlock | undefined {
   if (!plan.approval.browserNavigationApproved) return block('missing-approval', 'Owner approval for browser navigation is required.');
-  if (isProductionLikeUrl(request.appUrl) && !request.allowProduction && !plan.approval.productionNavigationApproved) {
-    return block('production-risk', 'The app URL looks production-like; owner approval for production navigation is required.');
+  if (isProductionLikeUrl(request.appUrl) && (!request.allowProduction || !plan.approval.productionNavigationApproved)) {
+    return block('production-risk', 'The app URL looks production-like; owner approval for production navigation is required before continuing.');
   }
   const journey = plan.journeys.find((entry) => entry.slug === request.journeySlug);
   if (!journey) return block('journey-not-approved', `Journey "${request.journeySlug}" is not listed in the approved guide plan.`);
-  if (journey.steps.some(isDestructiveText) && !request.allowDestructiveActions && !plan.approval.destructiveActionsApproved) {
+  if (journey.steps.some(isDestructiveText) && (!request.allowDestructiveActions || !plan.approval.destructiveActionsApproved)) {
     return block('unclear-destructive-action', 'The approved journey appears to include destructive or side-effecting actions; explicit test-environment approval is required.');
   }
-  if (plan.approval.authenticatedTestCredentialsAvailable && !hasCredentials(request.credentials)) {
+  if (request.credentials && !plan.approval.authenticatedTestCredentialsAvailable) {
+    return block('missing-approval', 'Credentials were provided, but the approved guide plan does not approve authenticated test credential use.');
+  }
+  if (journey.steps.some(requiresCredentials) && !hasCredentials(request.credentials)) {
     return block('missing-credentials', 'Owner-approved test credentials are required before authenticating.');
   }
   return undefined;
+}
+
+export function requiresCredentials(text: string): boolean {
+  return /\b(email|username|password|otp|one[- ]?time|verification code|login|log in|sign in|authenticate)\b/i.test(text);
 }
 
 export function isDestructiveText(text: string): boolean {
