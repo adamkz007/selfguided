@@ -40,16 +40,28 @@ export function loadRedactionRules(path: string): RedactionRuleConfig {
 }
 
 export function buildRedactionPlan(observations: TextObservation[], config: RedactionRuleConfig = {}): RedactionPlan {
-  const patterns = [
-    ...builtInPatterns,
-    ...(config.customerNames ?? []).filter(Boolean).map((name) => ({ reason: 'customer name', pattern: new RegExp(escapeRegExp(name), 'i') })),
-    ...(config.extraPatterns ?? []).map((pattern) => ({ reason: 'custom pattern', pattern: new RegExp(pattern, 'i') })),
-  ];
+  const patterns = rules(config);
   const matchedText = observations.flatMap((observation) => {
     const match = patterns.find(({ pattern }) => pattern.test(observation.text));
     return match ? [{ ...observation, reason: match.reason }] : [];
   });
   return { regions: [...(config.regions ?? []), ...matchedText.map(({ x, y, width, height, reason }) => ({ x, y, width, height, reason }))], matchedText, warnings: [] };
+}
+
+export function redactSensitiveText(text: string, config: RedactionRuleConfig = {}): string {
+  return rules(config).reduce((value, rule) => value.replace(rule.pattern, '[REDACTED]'), text);
+}
+
+export function containsSensitiveText(text: string, config: RedactionRuleConfig = {}): boolean {
+  return rules(config).some((rule) => rule.pattern.test(text));
+}
+
+function rules(config: RedactionRuleConfig): Array<{ reason: string; pattern: RegExp }> {
+  return [
+    ...builtInPatterns,
+    ...(config.customerNames ?? []).filter(Boolean).map((name) => ({ reason: 'customer name', pattern: new RegExp(escapeRegExp(name), 'i') })),
+    ...(config.extraPatterns ?? []).map((pattern) => ({ reason: 'custom pattern', pattern: new RegExp(pattern, 'i') })),
+  ];
 }
 
 function escapeRegExp(value: string): string {

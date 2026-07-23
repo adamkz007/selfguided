@@ -1,0 +1,11 @@
+dist/
+node_modules/
+.selfguided/app-map.json
+.selfguided/product-understanding.md
+.selfguided/guide-candidates.json
+.selfguided/owner-alignment.json
+.selfguided/approved-guide-plan.md
+.selfguided/drafts/
+.selfguided/reviews/
+.selfguided/runs/
+.selfguided/verification/

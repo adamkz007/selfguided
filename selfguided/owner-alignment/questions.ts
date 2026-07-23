@@ -57,6 +57,20 @@ export const ownerAlignmentQuestions: readonly OwnerAlignmentQuestion[] = [
     required: true,
   },
   {
+    id: 'destructiveActionsApproved',
+    type: 'boolean',
+    prompt: 'Are destructive test-environment actions approved?',
+    description: 'Leave this off unless a specific journey requires a side effect such as an invite, email, deletion, billing action, or publication.',
+    required: false,
+  },
+  {
+    id: 'productionNavigationApproved',
+    type: 'boolean',
+    prompt: 'Is production navigation approved?',
+    description: 'Leave this off for the normal local or staging-only workflow.',
+    required: false,
+  },
+  {
     id: 'guidesFilesMayBeWritten',
     type: 'boolean',
     prompt: 'May generated /guides files be written?',

@@ -14,6 +14,7 @@ export interface ScreenshotProcessingInput {
   textObservations?: TextObservation[];
   altText: AltTextContext;
   ownerReviewed?: boolean;
+  applyRedactions?: (inputPath: string, outputPath: string, plan: RedactionPlan) => Promise<void> | void;
 }
 
 export interface ProcessedScreenshot {
@@ -22,7 +23,7 @@ export interface ProcessedScreenshot {
   redactionPlan: RedactionPlan;
   optimization: OptimizationResult;
   altText: string;
-  status: 'awaiting-owner-review' | 'finalized';
+  status: 'awaiting-owner-review' | 'needs-redaction' | 'finalized';
 }
 
 export async function processScreenshot(input: ScreenshotProcessingInput): Promise<ProcessedScreenshot> {
@@ -31,13 +32,14 @@ export async function processScreenshot(input: ScreenshotProcessingInput): Promi
   const optimizedPath = join(input.outputDirectory, normalizedFilename);
   const redactionPlan = buildRedactionPlan(input.textObservations ?? [], input.redactionRules);
   const optimization = await optimizeImage(input.sourcePath, optimizedPath);
+  if (redactionPlan.regions.length && input.applyRedactions) await input.applyRedactions(input.sourcePath, optimizedPath, redactionPlan);
   return {
     normalizedFilename,
     optimizedPath,
     redactionPlan,
     optimization,
     altText: generateAltText({ ...input.altText, redacted: redactionPlan.regions.length > 0 }),
-    status: input.ownerReviewed ? 'finalized' : 'awaiting-owner-review',
+    status: redactionPlan.regions.length && !input.applyRedactions ? 'needs-redaction' : input.ownerReviewed ? 'finalized' : 'awaiting-owner-review',
   };
 }
 

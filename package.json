@@ -1,0 +1,23 @@
+{
+  "name": "selfguided",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Owner-approved SaaS discovery and guide generation workflow.",
+  "type": "commonjs",
+  "bin": {
+    "selfguided": "./dist/selfguided/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "selfguided": "npm run build && node dist/selfguided/cli.js",
+    "guides:validate": "npm run selfguided -- validate",
+    "guides:index": "npm run selfguided -- index",
+    "guides:check": "npm run check && npm test && npm run guides:validate"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}
