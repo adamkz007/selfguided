@@ -30,6 +30,8 @@ export interface OwnerAlignmentApproval {
   screenshotsApproved: boolean;
   authenticatedTestCredentialsAvailable: boolean;
   guidesFilesMayBeWritten: boolean;
+  destructiveActionsApproved?: boolean;
+  productionNavigationApproved?: boolean;
 }
 
 export interface OwnerAlignmentResult extends OwnerAlignmentApproval {
@@ -66,6 +68,8 @@ export function createOwnerAlignmentArtifact(
       approvedTargetAudiences: [...result.approvedTargetAudiences],
       approvedKeyGoals: [...result.approvedKeyGoals],
       excludedRoutesOrWorkflows: result.excludedRoutesOrWorkflows.map((entry) => ({ ...entry })),
+      destructiveActionsApproved: result.destructiveActionsApproved ?? false,
+      productionNavigationApproved: result.productionNavigationApproved ?? false,
       approvedAt: result.approvedAt ?? generatedAt,
     },
   };

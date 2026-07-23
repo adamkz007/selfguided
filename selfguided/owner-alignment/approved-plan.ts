@@ -25,6 +25,8 @@ export function renderApprovedGuidePlan(artifact: OwnerAlignmentArtifact): strin
     `- Browser navigation approved: ${yesNo(result.browserNavigationApproved)}\n` +
     `- Screenshots approved: ${yesNo(result.screenshotsApproved)}\n` +
     `- Authenticated test credentials available: ${yesNo(result.authenticatedTestCredentialsAvailable)}\n` +
+    `- Destructive actions approved: ${yesNo(result.destructiveActionsApproved ?? false)}\n` +
+    `- Production navigation approved: ${yesNo(result.productionNavigationApproved ?? false)}\n` +
     `- Generated /guides files may be written: ${yesNo(result.guidesFilesMayBeWritten)}\n\n` +
     `## Notes\n\n${result.notes?.trim() || 'None.'}\n`;
 }

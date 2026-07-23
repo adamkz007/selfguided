@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { BrowserTrace, BrowserTraceStep } from '../browser/trace-schema';
 import { generateAltText } from '../assets/screenshots/alt-text';
@@ -87,8 +87,39 @@ export function writeGuide(trace: BrowserTrace, options: GuideGenerationOptions)
 }
 
 export function loadGuideTemplate(templatePath = join(__dirname, 'templates', 'how-to-guide.mdx')): string {
-  return readFileSync(templatePath, 'utf8');
+  return existsSync(templatePath) ? readFileSync(templatePath, 'utf8') : defaultGuideTemplate;
 }
+
+const defaultGuideTemplate = `{{frontmatter}}
+
+# {{title}}
+
+{{description}}
+
+## Prerequisites
+
+{{prerequisites}}
+
+## Steps
+
+{{steps}}
+
+## Expected result
+
+{{expectedResults}}
+
+## Troubleshooting
+
+{{troubleshooting}}
+
+## Related guides
+
+{{relatedGuides}}
+
+Last verified: {{lastVerified}}
+
+Source journey trace: {{sourceJourneyTrace}}
+`;
 
 function validateApprovedTrace(trace: BrowserTrace): void {
   const issues: FrontmatterValidationIssue[] = [];

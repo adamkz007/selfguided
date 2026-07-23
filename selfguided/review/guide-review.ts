@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, relative } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import type { BrowserTrace } from '../browser/trace-schema';
+import { readGuideFile } from '../guides/content';
 import { generateGuide, type GeneratedGuide, type GuideGenerationOptions } from '../guides/generate-guide';
 import {
   createApprovalArtifact,
@@ -112,6 +113,7 @@ export function publishApprovedGuides(
   contentDirectory = 'guides',
   publishedIndexPath = join(contentDirectory, 'index.json'),
 ): PublishResult {
+  assertGuideWritesApproved(root);
   const review = readReviewArtifact(join(root, '.selfguided', 'reviews', 'guide-review.md'));
   const approvals = readApprovalArtifact(join(root, '.selfguided', 'reviews', 'approval.json'));
   const published: string[] = [];
@@ -127,6 +129,7 @@ export function publishApprovedGuides(
     const source = join(root, entry.draftPath);
     const destination = join(root, contentDirectory, basename(entry.draftPath));
     if (!existsSync(source)) throw new Error(`Draft guide is missing: ${source}.`);
+    publishScreenshotAssets(root, source, entry.title);
     mkdirSync(dirname(destination), { recursive: true });
     renameSync(source, destination);
     published.push(relative(root, destination));
@@ -137,6 +140,30 @@ export function publishApprovedGuides(
   mkdirSync(dirname(indexFile), { recursive: true });
   writeFileSync(indexFile, `${JSON.stringify(index, null, 2)}\n`);
   return { published, skipped, indexPath: indexFile };
+}
+
+function publishScreenshotAssets(root: string, guidePath: string, title: string): void {
+  const guide = readGuideFile(guidePath);
+  let markdown = readFileSync(guidePath, 'utf8');
+  for (const screenshot of guide.frontmatter.screenshots) {
+    if (screenshot.startsWith('/guides/assets/')) continue;
+    const source = isAbsolute(screenshot) ? screenshot : join(root, screenshot);
+    if (!existsSync(source)) throw new Error(`Approved guide screenshot is missing: ${source}.`);
+    const filename = `${slugify(title)}-${basename(source)}`;
+    const assetPath = join(root, 'public', 'guides', 'assets', filename);
+    mkdirSync(dirname(assetPath), { recursive: true });
+    copyFileSync(source, assetPath);
+    markdown = markdown.split(screenshot).join(`/guides/assets/${filename}`);
+  }
+  writeFileSync(guidePath, markdown);
+}
+
+function assertGuideWritesApproved(root: string): void {
+  const planPath = join(root, '.selfguided', 'approved-guide-plan.md');
+  if (!existsSync(planPath)) throw new Error('Owner-approved guide plan is missing; generated guides cannot be published.');
+  if (!/Generated \/guides files may be written:\s*Yes/i.test(readFileSync(planPath, 'utf8'))) {
+    throw new Error('Owner approval to write generated /guides files is required before publishing.');
+  }
 }
 
 export function renderGuideReview(review: GuideReviewArtifact): string {

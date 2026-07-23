@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ApplicationMap } from '../discovery/output-schema';
 import { discoverApplication } from '../discovery';
@@ -6,84 +6,74 @@ import type { GuideFrontmatter } from './frontmatter-schema';
 
 export interface GuideDirectoryEntry extends GuideFrontmatter {
   slug: string;
+  body?: string;
   popular?: boolean;
 }
 
 export interface GeneratedGuidesRoute {
   framework: 'next-app-router';
   pagePath: string;
+  detailPagePath: string;
   source: string;
 }
+
+export interface GenerateGuidesRouteOptions { overwrite?: boolean; }
 
 export function generateGuidesRoute(
   appRoot: string,
   guides: GuideDirectoryEntry[],
   applicationMap = discoverApplication({ root: appRoot }),
+  options: GenerateGuidesRouteOptions = {},
 ): GeneratedGuidesRoute {
-  if (!isNextAppRouter(applicationMap)) {
-    throw new Error('SelfGuided guide directory currently supports Next.js App Router targets only.');
-  }
+  if (!isNextAppRouter(applicationMap)) throw new Error('SelfGuided guide directory currently supports Next.js App Router targets only.');
   const pagePath = join(appRoot, 'app', 'guides', 'page.tsx');
+  const detailPagePath = join(appRoot, 'app', 'guides', '[slug]', 'page.tsx');
+  if (!options.overwrite && [pagePath, detailPagePath].some(existsSync)) throw new Error('A /guides route already exists. Re-run with explicit overwrite approval only after reviewing it.');
   const source = renderNextGuidesPage(guides);
-  mkdirSync(join(appRoot, 'app', 'guides'), { recursive: true });
+  mkdirSync(join(appRoot, 'app', 'guides', '[slug]'), { recursive: true });
   writeFileSync(pagePath, source);
-  return { framework: 'next-app-router', pagePath, source };
+  writeFileSync(detailPagePath, renderNextGuideDetailPage(guides));
+  return { framework: 'next-app-router', pagePath, detailPagePath, source };
 }
 
 export function isNextAppRouter(applicationMap: ApplicationMap): boolean {
-  return applicationMap.framework.frameworks.some((item) => item.name === 'Next.js') &&
-    applicationMap.framework.routingConventions.some((item) => item.name === 'Next.js app router');
+  return applicationMap.framework.frameworks.some((item) => item.name === 'Next.js') && applicationMap.framework.routingConventions.some((item) => item.name === 'Next.js app router');
 }
 
 export function renderNextGuidesPage(guides: GuideDirectoryEntry[]): string {
-  const data = JSON.stringify(guides, null, 2);
   return `'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
-type Guide = ${JSON.stringify({} as GuideDirectoryEntry).replace('{}', '{ slug: string; title: string; description: string; category: string; estimatedTime: string; tags: string[]; audience: string[]; lastVerified: string; popular?: boolean }')};
-
-const guides: Guide[] = ${data};
+type Guide = { slug: string; title: string; description: string; category: string; estimatedTime: string; tags: string[]; audience: string[]; lastVerified: string; popular?: boolean };
+const guides: Guide[] = ${JSON.stringify(guides.map(({ body: _body, ...guide }) => guide), null, 2)};
 const categories = ['All', ...new Set(guides.map((guide) => guide.category))];
 const audiences = ['All', ...new Set(guides.flatMap((guide) => guide.audience))];
 
 export default function GuidesPage() {
-  const [query, setQuery] = useState('');
-  const [category, setCategory] = useState('All');
-  const [audience, setAudience] = useState('All');
-  const normalizedQuery = query.trim().toLowerCase();
-  const filtered = useMemo(() => guides.filter((guide) => {
-    const searchable = [guide.title, guide.description, guide.category, ...guide.tags].join(' ').toLowerCase();
-    return (!normalizedQuery || searchable.includes(normalizedQuery)) &&
-      (category === 'All' || guide.category === category) &&
-      (audience === 'All' || guide.audience.includes(audience));
-  }), [normalizedQuery, category, audience]);
-  const popular = filtered.filter((guide) => guide.popular).slice(0, 3);
-  const recent = [...filtered].sort((a, b) => b.lastVerified.localeCompare(a.lastVerified)).slice(0, 3);
-
-  return <main className="guides-page">
-    <style jsx>{\`\n      .guides-page { max-width: 1120px; margin: 0 auto; padding: 48px 24px 72px; color: #172033; }\n      .hero { margin-bottom: 32px; }\n      .eyebrow { color: #5367d8; font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }\n      h1 { margin: 8px 0; font-size: clamp(2rem, 5vw, 3.5rem); letter-spacing: -.04em; }\n      .intro { max-width: 660px; color: #5d687c; font-size: 1.05rem; }\n      .toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, 220px)); gap: 12px; margin: 28px 0 44px; }\n      label { display: grid; gap: 6px; color: #4c5870; font-size: .85rem; font-weight: 650; }\n      input, select { min-height: 44px; border: 1px solid #c9d0dc; border-radius: 8px; background: white; padding: 0 12px; color: inherit; font: inherit; }\n      input:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid #aab7ff; outline-offset: 2px; }\n      .filter-group { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; }\n      .filter { border: 1px solid #c9d0dc; border-radius: 999px; background: white; padding: 8px 14px; color: #4c5870; cursor: pointer; font: inherit; }\n      .filter[aria-pressed="true"] { border-color: #5367d8; background: #eef0ff; color: #3143aa; }\n      section { margin-top: 36px; }\n      .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 14px; }\n      h2 { margin: 0; font-size: 1.35rem; }\n      .count { color: #68748a; font-size: .9rem; }\n      .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }\n      .card { display: flex; min-height: 190px; flex-direction: column; border: 1px solid #dbe0e8; border-radius: 12px; padding: 20px; background: white; box-shadow: 0 5px 18px rgb(35 46 71 / 6%); }\n      .card h3 { margin: 10px 0 8px; font-size: 1.08rem; }\n      .card p { flex: 1; margin: 0 0 16px; color: #5d687c; line-height: 1.5; }\n      .meta { display: flex; flex-wrap: wrap; gap: 8px 12px; color: #68748a; font-size: .82rem; }\n      .category { color: #5367d8; font-size: .78rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }\n      .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }\n      .tag { border-radius: 5px; background: #f0f2f6; padding: 4px 7px; color: #59657a; font-size: .75rem; }\n      .empty { border: 1px dashed #b9c1cf; border-radius: 12px; padding: 36px 20px; text-align: center; color: #5d687c; }\n      .empty h2 { margin-bottom: 8px; color: #172033; }\n      @media (max-width: 760px) { .guides-page { padding: 32px 16px 48px; } .toolbar { grid-template-columns: 1fr; } .grid { grid-template-columns: 1fr; } .section-heading { align-items: flex-start; flex-direction: column; gap: 4px; } }\n    \`} </style>
-    <header className="hero">
-      <div className="eyebrow">Self-guided help</div>
-      <h1>Guides</h1>
-      <p className="intro">Find clear, step-by-step instructions for getting the most out of your workspace.</p>
-    </header>
-    <div className="toolbar" role="search" aria-label="Search and filter guides">
-      <label>Search guides<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by task or topic" type="search" /></label>
-      <label>Category<select value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select></label>
-      <label>Audience<select value={audience} onChange={(event) => setAudience(event.target.value)}>{audiences.map((item) => <option key={item}>{item}</option>)}</select></label>
-    </div>
-    <div className="filter-group" aria-label="Category filters">{categories.map((item) => <button className="filter" key={item} aria-pressed={category === item} onClick={() => setCategory(item)}>{item}</button>)}</div>
-    {filtered.length ? <>
-      {popular.length ? <GuideSection title="Popular guides" guides={popular} /> : null}
-      {recent.length ? <GuideSection title="Recently updated" guides={recent} /> : null}
-      <GuideSection title="All guides" guides={filtered} />
-    </> : <div className="empty" role="status"><h2>No guides found</h2><p>Try a different search term or clear one of the filters.</p></div>}
-  </main>;
+  const [query, setQuery] = useState(''); const [category, setCategory] = useState('All'); const [audience, setAudience] = useState('All');
+  const filtered = useMemo(() => guides.filter((guide) => [guide.title, guide.description, guide.category, ...guide.tags].join(' ').toLowerCase().includes(query.trim().toLowerCase()) && (category === 'All' || guide.category === category) && (audience === 'All' || guide.audience.includes(audience))), [query, category, audience]);
+  const recent = [...filtered].sort((left, right) => right.lastVerified.localeCompare(left.lastVerified)).slice(0, 3);
+  return <main className="guides-page"><header><p>Self-guided help</p><h1>Guides</h1><p>Find clear, step-by-step instructions for your workspace.</p></header><div className="filters" role="search"><label>Search guides<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by task or topic" /></label><label>Category<select value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select></label><label>Audience<select value={audience} onChange={(event) => setAudience(event.target.value)}>{audiences.map((item) => <option key={item}>{item}</option>)}</select></label></div>{filtered.length ? <><GuideSection title="Popular guides" guides={filtered.filter((guide) => guide.popular).slice(0, 3)} /><GuideSection title="Recently updated" guides={recent} /><GuideSection title="All guides" guides={filtered} /></> : <p role="status">No guides found. Try a different search term or filter.</p>}<style jsx>{\`.guides-page{max-width:72rem;margin:auto;padding:3rem 1.5rem}.filters,.grid{display:grid;gap:1rem}.filters{grid-template-columns:2fr 1fr 1fr;margin:2rem 0}label{display:grid;gap:.4rem;font-weight:600}input,select{min-height:2.75rem;padding:.5rem;border:1px solid currentColor;border-radius:.4rem}.grid{grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))}.card{border:1px solid #d6d9df;border-radius:.75rem;padding:1.25rem}.meta{color:#596579;font-size:.9rem}@media(max-width:44rem){.filters{grid-template-columns:1fr}}\`}</style></main>;
+}
+function GuideSection({ title, guides }: { title: string; guides: Guide[] }) { if (!guides.length) return null; return <section><h2>{title}</h2><div className="grid">{guides.map((guide) => <article className="card" key={guide.slug}><p>{guide.category}</p><h3><Link href={\`/guides/\${guide.slug}\`}>{guide.title}</Link></h3><p>{guide.description}</p><p className="meta">{guide.estimatedTime} · Updated {guide.lastVerified}</p></article>)}</div></section>; }
+`;
 }
 
-function GuideSection({ title, guides }: { title: string; guides: Guide[] }) {
-  return <section aria-labelledby={title.replaceAll(' ', '-').toLowerCase()}><div className="section-heading"><h2 id={title.replaceAll(' ', '-').toLowerCase()}>{title}</h2><span className="count">{guides.length} {guides.length === 1 ? 'guide' : 'guides'}</span></div><div className="grid">{guides.map((guide) => <article className="card" key={guide.slug}><div className="category">{guide.category}</div><h3>{guide.title}</h3><p>{guide.description}</p><div className="meta"><span>{guide.estimatedTime}</span><span>Updated {guide.lastVerified}</span></div><div className="tags" aria-label={\`Tags for \${guide.title}\`}>{guide.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div></article>)}</div></section>;
+export function renderNextGuideDetailPage(guides: GuideDirectoryEntry[]): string {
+  return `import Link from 'next/link';
+import { notFound } from 'next/navigation';
+
+type Guide = { slug: string; title: string; description: string; category: string; estimatedTime: string; tags: string[]; lastVerified: string; prerequisites: string[]; expectedResults: string[]; relatedGuides: string[]; body?: string };
+const guides: Guide[] = ${JSON.stringify(guides, null, 2)};
+export function generateStaticParams() { return guides.map((guide) => ({ slug: guide.slug })); }
+export default function GuideDetailPage({ params }: { params: { slug: string } }) {
+  const guide = guides.find((item) => item.slug === params.slug); if (!guide) notFound();
+  const lines = (guide.body || guide.description).split('\\n').filter(Boolean); const headings = lines.filter((line) => line.startsWith('## '));
+  return <main className="guide"><Link href="/guides">← All guides</Link><p>{guide.category} · {guide.estimatedTime}</p><h1>{guide.title}</h1><p>{guide.description}</p>{headings.length ? <nav aria-label="On this page"><strong>On this page</strong><ul>{headings.map((heading) => <li key={heading}><a href={\`#\${slug(heading.slice(3))}\`}>{heading.slice(3)}</a></li>)}</ul></nav> : null}<article>{lines.map(renderLine)}</article><section><h2>Related guides</h2>{guide.relatedGuides.length ? <ul>{guide.relatedGuides.map((slug) => <li key={slug}><Link href={\`/guides/\${slug}\`}>{guides.find((item) => item.slug === slug)?.title || slug}</Link></li>)}</ul> : <p>No related guides yet.</p>}</section><p>Last verified {guide.lastVerified}</p><style jsx>{\`.guide{max-width:48rem;margin:auto;padding:3rem 1.5rem}.guide article{line-height:1.7}.guide nav{padding:1rem;border:1px solid #d6d9df;border-radius:.5rem}.guide h2{margin-top:2rem}.guide figure{margin:1.5rem 0}.guide img{max-width:100%;height:auto;border:1px solid #d6d9df;border-radius:.5rem}\`}</style></main>;
 }
+function slug(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''); }
+function renderLine(line: string, index: number) { const image = line.match(/^!\\[([^\\]]*)\\]\\(([^)]+)\\)$/); if (image) return <figure key={index}><img src={image[2]} alt={image[1]} /><figcaption>{image[1]}</figcaption></figure>; if (line.startsWith('## ')) return <h2 id={slug(line.slice(3))} key={index}>{line.slice(3)}</h2>; if (line.startsWith('- ')) return <li key={index}>{line.slice(2)}</li>; return <p key={index}>{line.replace(/^[0-9]+\\. \\*\\*|\\*\\* — /g, '')}</p>; }
 `;
 }

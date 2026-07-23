@@ -1,6 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { relative } from 'node:path';
 import { captureApprovedScreenshot } from './screenshotter';
+import { containsSensitiveText, redactSensitiveText } from '../assets/screenshots/redact';
 import { createBrowserSession, type BrowserLauncherAdapter, type BrowserPageAdapter } from './session';
 import { evaluateRunSafety, isDestructiveText, loadApprovedPlan, requiresCredentials, type BrowserRunRequest, type TestCredentials } from './safety-guards';
 import type { BrowserTraceStep, PageObservation, VisibleElementSummary } from './trace-schema';
@@ -113,15 +114,18 @@ async function recordStep(page: BrowserPageAdapter, session: ReturnType<typeof c
 }
 
 async function observePage(page: BrowserPageAdapter, screenshotsDirectory: string, stepIndex: number, label: string, screenshotsApproved: boolean): Promise<PageObservation> {
-  const screenshotPath = await captureApprovedScreenshot(page, { screenshotsDirectory, enabled: screenshotsApproved, stepIndex, label });
+  const headings = await textLocator(page, 'h1,h2,h3');
+  const buttons = await textLocator(page, 'button,[role="button"],input[type="submit"]');
+  const links = await elementSummaries(page, 'a[href]');
+  const formFields = await elementSummaries(page, 'input,textarea,select');
+  const states = await textLocator(page, '[role="alert"],[aria-live],.error,.empty,.success,[data-state="empty"],[data-state="success"],[data-state="error"]');
+  const hasSensitiveText = containsSensitiveText(await pageText(page));
+  const screenshotPath = await captureApprovedScreenshot(page, { screenshotsDirectory, enabled: screenshotsApproved && !hasSensitiveText, stepIndex, label });
+  if (screenshotsApproved && !screenshotPath && hasSensitiveText) states.push({ text: 'Screenshot omitted because visible sensitive text requires redaction.' });
   return {
-    url: page.url(),
-    title: await page.title(),
-    headings: await textLocator(page, 'h1,h2,h3'),
-    buttons: await textLocator(page, 'button,[role="button"],input[type="submit"]'),
-    links: await elementSummaries(page, 'a[href]'),
-    formFields: await elementSummaries(page, 'input,textarea,select'),
-    states: await textLocator(page, '[role="alert"],[aria-live],.error,.empty,.success,[data-state="empty"],[data-state="success"],[data-state="error"]'),
+    url: redactUrl(page.url()),
+    title: redactSensitiveText(await page.title()),
+    headings, buttons, links, formFields, states,
     screenshotPath,
     capturedAt: new Date().toISOString(),
   };
@@ -129,16 +133,16 @@ async function observePage(page: BrowserPageAdapter, screenshotsDirectory: strin
 
 async function textLocator(page: BrowserPageAdapter, selector: string): Promise<VisibleElementSummary[]> {
   const values = await page.locator(selector).allTextContents();
-  return values.map((text) => ({ text: text.trim() })).filter((entry) => entry.text);
+  return values.map((text) => ({ text: redactSensitiveText(text.trim()) })).filter((entry) => entry.text);
 }
 
 async function elementSummaries(page: BrowserPageAdapter, selector: string): Promise<VisibleElementSummary[]> {
   return page.locator(selector).evaluateAll((elements) => elements.map((element) => ({
-    text: (element.textContent || '').trim(),
-    href: element instanceof HTMLAnchorElement ? element.href : undefined,
+    text: redactSensitiveText((element.textContent || '').trim()),
+    href: element instanceof HTMLAnchorElement ? redactUrl(element.href) : undefined,
     type: element instanceof HTMLInputElement ? element.type : element.getAttribute('type') || undefined,
-    name: element.getAttribute('name') || undefined,
-    placeholder: element.getAttribute('placeholder') || undefined,
+    name: redactSensitiveText(element.getAttribute('name') || '') || undefined,
+    placeholder: redactSensitiveText(element.getAttribute('placeholder') || '') || undefined,
     required: element.hasAttribute('required') || undefined,
   })).filter((entry) => entry.text || entry.href || entry.name || entry.placeholder));
 }
@@ -175,4 +179,8 @@ function writeArtifacts(tracePath: string, observationsPath: string, trace: unkn
 function appendObservationList(lines: string[], label: string, values: string[]): void {
   const visibleValues = values.map((value) => value.trim()).filter(Boolean).slice(0, 20);
   if (visibleValues.length) lines.push(`- ${label}: ${visibleValues.join('; ')}`);
+}
+
+function redactUrl(value: string): string {
+  try { const url = new URL(value); if (url.search || url.hash) return `${url.origin}${url.pathname}?…redacted`; return value; } catch { return redactSensitiveText(value); }
 }
